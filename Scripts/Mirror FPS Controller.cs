@@ -45,7 +45,7 @@ namespace Mirror_Server_Authoritative_FPS_Controller
         [SerializeField, Min(1)] private float maximumAllowableDifferenceInGravitationalAcceleration = 1;
 
         [Space, Header("Settings")]
-        [SerializeField] private float sensitivity = 2;
+        [SerializeField] protected float sensitivity = 2;
         [SerializeField] private KeyCode sprintingKey = KeyCode.LeftShift;
         [SerializeField] public KeyCode useKey = KeyCode.E;
         [Space]
@@ -71,7 +71,7 @@ namespace Mirror_Server_Authoritative_FPS_Controller
 #endif
 
 
-        private CharacterController characterController;
+        public CharacterController characterController { get; private set; }
 
         private Character character;
 
@@ -462,12 +462,14 @@ namespace Mirror_Server_Authoritative_FPS_Controller
         #region Rotation
 
         [Client]
-        private void Rotate()
+        protected virtual void Rotate()
         {
             if (!CanRotate()) return;
 
-            rotX += Input.GetAxis("Mouse X") * sensitivity;
-            rotY -= Input.GetAxis("Mouse Y") * sensitivity;
+            float realSensitivity = sensitivity * SensitivityFactor();
+
+            rotX += Input.GetAxis("Mouse X") * realSensitivity;
+            rotY -= Input.GetAxis("Mouse Y") * realSensitivity;
 
             rotY = Mathf.Clamp(rotY, -90, 90);
 
@@ -479,7 +481,7 @@ namespace Mirror_Server_Authoritative_FPS_Controller
         }
 
         [Command]
-        private void CmdSetRot(Vector2 rot)
+        protected void CmdSetRot(Vector2 rot)
         {
             if (!CanRotate(true)) return;
 
@@ -514,6 +516,8 @@ namespace Mirror_Server_Authoritative_FPS_Controller
 
             transform.rotation = Quaternion.Euler(0, rot.x, 0);
         }
+
+        protected virtual float SensitivityFactor() => 1;
 
         #endregion
 
