@@ -1,4 +1,4 @@
-﻿//#define DEBUG_MOVEMENT
+﻿#define DEBUG_MOVEMENT
 
 using Mirror;
 using System;
@@ -59,14 +59,14 @@ namespace Mirror_Server_Authoritative_FPS_Controller
 
 #if DEBUG_MOVEMENT
 
-    [Space, Header("Debug")]
-    [SerializeField] private GameObject prefabPlayerDebug;
-    [NonSerialized] private GameObject playerDebug;
+        [Space, Header("Debug")]
+        [SerializeField] private GameObject prefabPlayerDebug;
+        [NonSerialized] private GameObject playerDebug;
 
-    [SerializeField] private GameObject prefabPlayerDebugTarget;
-    [NonSerialized] private GameObject playerDebugTarget;
-    [Space]
-    [SerializeField] private bool isDebug;
+        [SerializeField] private GameObject prefabPlayerDebugTarget;
+        [NonSerialized] private GameObject playerDebugTarget;
+        [Space]
+        [SerializeField] private bool isDebug;
 
 #endif
 
@@ -108,6 +108,8 @@ namespace Mirror_Server_Authoritative_FPS_Controller
 
         private float isSprinting;
 
+        private bool isGrounded = false;
+
         protected float noclipSpeed = 10;
 
         private float gravity = -1;
@@ -125,11 +127,11 @@ namespace Mirror_Server_Authoritative_FPS_Controller
 
 #if DEBUG_MOVEMENT
 
-        if (isLocalPlayer && isDebug)
-        {
-            playerDebug = Instantiate(prefabPlayerDebug, transform.position, Quaternion.Euler(0, 0, 0));
-            playerDebugTarget = Instantiate(prefabPlayerDebugTarget, transform.position, Quaternion.Euler(0, 0, 0));
-        }
+            if (isLocalPlayer && isDebug)
+            {
+                playerDebug = Instantiate(prefabPlayerDebug, transform.position, Quaternion.Euler(0, 0, 0));
+                playerDebugTarget = Instantiate(prefabPlayerDebugTarget, transform.position, Quaternion.Euler(0, 0, 0));
+            }
 
 #endif
 
@@ -152,11 +154,32 @@ namespace Mirror_Server_Authoritative_FPS_Controller
 
             InputMove(ref motion);
 
-            CalculateGravity(ref motion);
+            //CalculateGravity(ref motion);
+            if (Input.GetKeyDown(KeyCode.Space))
+                isJumping = true;
 
             Rotate();
 
             MoveByClient(motion);
+        }
+
+        protected virtual void FixedUpdate()
+        {
+            if (!isLocalPlayer && !NetworkServer.active) return;
+
+            float y = 0;
+
+            if (!isLocalPlayer && NetworkServer.active)
+                y = CalculateGravityByServer();
+            else
+                y = CalculateGravity();
+
+
+            characterController.Move(new Vector3(0, y, 0));
+
+            isGrounded = characterController.isGrounded;
+
+            clientPhysicalData.isGrounded = characterController.isGrounded;
         }
 
         #endregion
@@ -230,7 +253,7 @@ namespace Mirror_Server_Authoritative_FPS_Controller
 
                 CmdSetMoveTarget(transform.position, transform.position + vector, Input.GetKey(sprintingKey) ? Time.deltaTime : 0);
 #if DEBUG_MOVEMENT
-            playerDebugTarget.transform.position = transform.position + vector;
+                playerDebugTarget.transform.position = transform.position + vector;
 #endif
             }
         }
@@ -279,8 +302,7 @@ namespace Mirror_Server_Authoritative_FPS_Controller
                     Vector3.Distance(directional, Vector3.zero),
                     ref directional);
 
-            if (GravityCanBeCalculated(true))
-                CalculateGravityByServer(ref directional);
+            //CalculateGravityByServer(ref directional);
 
             Vector3 startPos = transform.position;
 
@@ -397,8 +419,8 @@ namespace Mirror_Server_Authoritative_FPS_Controller
             if (isLocalPlayer)
             {
 #if DEBUG_MOVEMENT
-            if (isDebug && playerDebug != null)
-                playerDebug.transform.position = pos;
+                if (isDebug && playerDebug != null)
+                    playerDebug.transform.position = pos;
 #endif
 
 
@@ -507,9 +529,9 @@ namespace Mirror_Server_Authoritative_FPS_Controller
             if (isLocalPlayer)
             {
 #if DEBUG_MOVEMENT
-            if (!isDebug || playerDebug == null) return;
+                if (!isDebug || playerDebug == null) return;
 
-            playerDebug.transform.rotation = Quaternion.Euler(0, rot.x, 0);
+                playerDebug.transform.rotation = Quaternion.Euler(0, rot.x, 0);
 #endif
                 return;
             }
@@ -524,39 +546,38 @@ namespace Mirror_Server_Authoritative_FPS_Controller
         #region Physics
 
         [Client]
-        private void CalculateGravity(ref Vector3 vector)
+        private float CalculateGravity()
         {
-            if (!GravityCanBeCalculated()) return;
+            if (!GravityCanBeCalculated()) return 0;
+
+            float y = transform.position.y;
 
             if (noclip)
             {
                 clientPhysicalData.fall = 0;
                 clientPhysicalData.isGrounded = false;
 
-                if (!CanMove()) return;
+                if (!CanMove()) return 0;
 
-                float add = 0;
+                y += (Input.GetKey(KeyCode.Space)) ? 1 : 0;
+                y -= (Input.GetKey(KeyCode.C)) ? 1 : 0;
 
-                add += (Input.GetKey(KeyCode.Space)) ? 1 : 0;
-                add -= (Input.GetKey(KeyCode.C)) ? 1 : 0;
+                y *= Time.fixedDeltaTime * (noclipSpeed * (Input.GetKey(sprintingKey) ? 2 : 1));
 
-                add *= Time.deltaTime * (noclipSpeed * (Input.GetKey(sprintingKey) ? 2 : 1));
-
-                vector.y += add;
-
-                return;
+                return y;
             }
 
-            clientPhysicalData.isGrounded = characterController.isGrounded;
-
-            if (characterController.isGrounded)
+            if (isGrounded)
             {
                 gravity = initialFallRate;
                 clientPhysicalData.fall = 0;
 
                 if (CanJump())
-                    if (Input.GetKeyDown(KeyCode.Space))
+                    //if (Input.GetKeyDown(KeyCode.Space))
+                    if (isJumping)
                     {
+                        isJumping = false;
+
                         if (!NetworkServer.active)
                             CmdJump();
                         else
@@ -564,24 +585,30 @@ namespace Mirror_Server_Authoritative_FPS_Controller
                         gravity = jumpForce;
                     }
 
-                vector.y = gravity * Time.deltaTime;
+                y = gravity * Time.fixedDeltaTime;
 
-                return;
+                return y;
             }
 
-            gravity -= accelerationOfGravity * Time.deltaTime;
+            gravity -= accelerationOfGravity * Time.fixedDeltaTime;
 
             clientPhysicalData.fall = Mathf.Clamp(-gravity, -0.9f, 0.9f);
 
-            vector.y = gravity * Time.deltaTime;
+            y = gravity * Time.fixedDeltaTime;
+
+            return y;
         }
 
         private bool isJumping = false;
 
         [Server]
-        private void CalculateGravityByServer(ref Vector3 vector)
+        private float CalculateGravityByServer()
         {
-            if (characterController.isGrounded)
+            if (!GravityCanBeCalculated(true)) return 0;
+
+            float y = 0;
+
+            if (isGrounded)
             {
                 gravity = initialFallRate;
 
@@ -594,16 +621,16 @@ namespace Mirror_Server_Authoritative_FPS_Controller
                     RpcPlayAnimJump();
                 }
 
-                vector.y = gravity * Time.deltaTime;
+                y = gravity * Time.fixedDeltaTime;
 
-                return;
+                return y;
             }
 
-            gravity -= accelerationOfGravity * Time.deltaTime;
+            gravity -= accelerationOfGravity * Time.fixedDeltaTime;
 
-            vector.y = gravity * Time.deltaTime;
+            y = gravity * Time.fixedDeltaTime;
 
-            return;
+            return y;
         }
 
         [Command]
