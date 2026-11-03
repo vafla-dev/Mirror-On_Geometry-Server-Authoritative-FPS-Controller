@@ -3,7 +3,6 @@
 using Mirror;
 using System;
 using System.Collections.Generic;
-using Unity.VisualScripting;
 using UnityEngine;
 
 
@@ -155,6 +154,7 @@ namespace Mirror_Server_Authoritative_FPS_Controller
             InputMove(ref motion);
 
             //CalculateGravity(ref motion);
+            
             if (Input.GetKeyDown(KeyCode.Space))
                 isJumping = true;
 
@@ -303,6 +303,8 @@ namespace Mirror_Server_Authoritative_FPS_Controller
                     ref directional);
 
             //CalculateGravityByServer(ref directional);
+
+            directional.y = 0;//This is a placeholder. Please finish this
 
             Vector3 startPos = transform.position;
 
@@ -579,7 +581,7 @@ namespace Mirror_Server_Authoritative_FPS_Controller
                         isJumping = false;
 
                         if (!NetworkServer.active)
-                            CmdJump();
+                            CmdJump(transform.position);
                         else
                             RpcPlayAnimJump();
                         gravity = jumpForce;
@@ -600,6 +602,7 @@ namespace Mirror_Server_Authoritative_FPS_Controller
         }
 
         private bool isJumping = false;
+        private Vector3 jumpStartingPoint = Vector3.zero;
 
         [Server]
         private float CalculateGravityByServer()
@@ -614,11 +617,14 @@ namespace Mirror_Server_Authoritative_FPS_Controller
 
                 if (isJumping)
                 {
-                    gravity = jumpForce;
+                    if (IsTheBestPositionForAJump())
+                    {
+                        gravity = jumpForce;
 
-                    isJumping = false;
+                        isJumping = false;
 
-                    RpcPlayAnimJump();
+                        RpcPlayAnimJump();
+                    }
                 }
 
                 y = gravity * Time.fixedDeltaTime;
@@ -631,14 +637,26 @@ namespace Mirror_Server_Authoritative_FPS_Controller
             y = gravity * Time.fixedDeltaTime;
 
             return y;
+
+            bool IsTheBestPositionForAJump()
+            {
+                Vector3 nextPos = velocity * Time.fixedDeltaTime + transform.position;
+
+                if (Vector3.Distance(nextPos, jumpStartingPoint) >= Vector3.Distance(transform.position, jumpStartingPoint))
+                    return true;
+
+                return false;
+            }
         }
 
         [Command]
-        private void CmdJump()
+        private void CmdJump(Vector3 where)
         {
             if (!CanJump(true)) return;
 
             if (!GravityCanBeCalculated(true)) return;
+
+            jumpStartingPoint = where;
 
             isJumping = true;
         }
