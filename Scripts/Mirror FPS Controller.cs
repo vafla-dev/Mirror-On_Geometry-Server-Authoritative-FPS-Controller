@@ -1,4 +1,4 @@
-﻿#define DEBUG_MOVEMENT
+﻿//#define DEBUG_MOVEMENT
 
 using Mirror;
 using System;
