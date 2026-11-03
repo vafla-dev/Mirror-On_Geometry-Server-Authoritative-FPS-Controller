@@ -154,7 +154,7 @@ namespace Mirror_Server_Authoritative_FPS_Controller
             InputMove(ref motion);
 
             //CalculateGravity(ref motion);
-            
+
             if (Input.GetKeyDown(KeyCode.Space))
                 isJumping = true;
 
@@ -574,11 +574,12 @@ namespace Mirror_Server_Authoritative_FPS_Controller
                 gravity = initialFallRate;
                 clientPhysicalData.fall = 0;
 
-                if (CanJump())
-                    //if (Input.GetKeyDown(KeyCode.Space))
-                    if (isJumping)
+                //if (Input.GetKeyDown(KeyCode.Space))
+                if (isJumping)
+                {
+                    isJumping = false;
+                    if (CanJump())
                     {
-                        isJumping = false;
 
                         if (!NetworkServer.active)
                             CmdJump(transform.position);
@@ -586,11 +587,14 @@ namespace Mirror_Server_Authoritative_FPS_Controller
                             RpcPlayAnimJump();
                         gravity = jumpForce;
                     }
+                }
 
                 y = gravity * Time.fixedDeltaTime;
 
                 return y;
             }
+            else if (isJumping)
+                isJumping = false;
 
             gravity -= accelerationOfGravity * Time.fixedDeltaTime;
 
